@@ -1325,7 +1325,7 @@ paths:
   /api/events/escrow/{escrowId}:
     get:
       tags: [Events]
-      summary: List all indexed events for a specific escrow
+      summary: List all indexed events for a specific escrow (cursor-paginated)
       operationId: listEscrowEvents
       security: []
       parameters:
@@ -1338,15 +1338,15 @@ paths:
           in: query
           schema:
             type: string
-        - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
       responses:
         '200':
-          description: Paginated escrow events
+          description: Cursor-paginated escrow events
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedEvents'
+                $ref: '#/components/schemas/CursorPaginatedEvents'
 
   /api/events/{id}:
     get:
@@ -1886,6 +1886,12 @@ components:
         default: 20
         minimum: 1
         maximum: 100
+    Cursor:
+      name: cursor
+      in: query
+      description: Opaque cursor (an event id) from a previous response's `nextCursor`. Omit to fetch the first page.
+      schema:
+        type: string
     SortBy:
       name: sortBy
       in: query
@@ -2298,6 +2304,19 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/IndexedEvent'
+
+    CursorPaginatedEvents:
+      type: object
+      required: [events, nextCursor]
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/IndexedEvent'
+        nextCursor:
+          type: string
+          nullable: true
+          description: Pass this as `cursor` to fetch the next page. `null` when there are no more events.
 
     KycStatus:
       type: object

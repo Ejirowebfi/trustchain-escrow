@@ -10,7 +10,12 @@
 import prisma from '../../lib/prisma.js';
 import cache from '../../lib/cache.js';
 import { logControllerError } from '../../config/logger.js';
-import { buildPaginatedResponse, parsePagination } from '../../lib/pagination.js';
+import {
+  buildPaginatedResponse,
+  parsePagination,
+  parseCursorPagination,
+  buildCursorResponse,
+} from '../../lib/pagination.js';
 
 const EVENT_TTL = 15; // seconds — events are append-only so short TTL is fine
 
@@ -108,6 +113,9 @@ const getEvent = async (req, res) => {
 /**
  * GET /api/events/escrow/:escrowId
  * List all events for a specific escrow, ordered chronologically.
+ *
+ * Cursor-based pagination: pass `cursor` (an event id) to fetch the page
+ * that follows it. `limit` defaults to 20 and is capped at 100.
  */
 const listEscrowEvents = async (req, res) => {
   try {
@@ -118,27 +126,33 @@ const listEscrowEvents = async (req, res) => {
       return res.status(400).json({ error: 'Invalid escrow id' });
     }
 
-    const { page, limit, skip } = parsePagination(req.query);
+    const { take, cursor } = parseCursorPagination(req.query);
     const { eventType } = req.query;
+
+    let cursorId;
+    if (cursor) {
+      cursorId = Number.parseInt(cursor, 10);
+      if (Number.isNaN(cursorId)) {
+        return res.status(400).json({ error: 'Invalid cursor' });
+      }
+    }
 
     const where = { escrowId };
     if (eventType) where.eventType = eventType;
 
-    const cacheKey = `events:escrow:${escrowId}:${eventType ?? ''}:${page}:${limit}`;
+    const cacheKey = `events:escrow:${escrowId}:${eventType ?? ''}:${take}:${cursor ?? ''}`;
     const cached = await cache.get(cacheKey);
     if (cached) return res.json(cached);
 
-    const [data, total] = await prisma.$transaction([
-      prisma.contractEvent.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { ledgerAt: 'asc' },
-      }),
-      prisma.contractEvent.count({ where }),
-    ]);
+    const data = await prisma.contractEvent.findMany({
+      where,
+      take,
+      ...(cursorId !== undefined ? { cursor: { id: cursorId }, skip: 1 } : {}),
+      orderBy: { id: 'asc' },
+    });
 
-    const result = buildPaginatedResponse(data.map(serializeEvent), { total, page, limit });
+    const { data: events, nextCursor } = buildCursorResponse(data, take, 'id');
+    const result = { events: events.map(serializeEvent), nextCursor };
     await cache.set(cacheKey, result, EVENT_TTL);
     res.json(result);
   } catch (err) {

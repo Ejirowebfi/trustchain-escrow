@@ -19,13 +19,19 @@ export default function EscrowsScreen() {
   const [role, setRole] = useState<(typeof ROLES)[number]>('all');
   const [status, setStatus] = useState<(typeof STATUSES)[number]>('All');
 
-  const { data, isLoading, refetch } = useUserEscrows(address, role);
+  const { data, isLoading, isFetching, refetch } = useUserEscrows(address, role);
   const escrows: Escrow[] = (data?.data ?? []).filter(
     (e) => status === 'All' || e.status === status,
   );
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
+      {data?.fromCache && (
+        <View style={styles.offlineBanner}>
+          <Text style={styles.offlineBannerText}>Showing offline data</Text>
+        </View>
+      )}
+
       {/* Role filter */}
       <View style={styles.filterRow}>
         {ROLES.map((r) => (
@@ -59,7 +65,7 @@ export default function EscrowsScreen() {
         keyExtractor={(e) => String(e.id)}
         contentContainerStyle={styles.list}
         refreshControl={
-          <RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor="#6366f1" />
+          <RefreshControl refreshing={isFetching} onRefresh={refetch} tintColor="#6366f1" />
         }
         renderItem={({ item }) => <EscrowCard escrow={item} userAddress={address} />}
         ListEmptyComponent={
@@ -78,6 +84,13 @@ export default function EscrowsScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#0f0f0f' },
+  offlineBanner: {
+    backgroundColor: '#7c2d12',
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  offlineBannerText: { color: '#fed7aa', fontSize: 12, fontWeight: '600' },
   filterRow: {
     flexDirection: 'row',
     paddingHorizontal: 16,
